@@ -44,8 +44,6 @@ sub filter_test_classes {
 
     return sub {
         return unless $File::Find::name =~ /\.pm$/;
-
-        
     };
 }
 
