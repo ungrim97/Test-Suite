@@ -1,65 +1,98 @@
-package Test::Suite;
 use 5.008005;
-use Moose;
+use Moops;
 
-use File::Spec::Functions qw/catdir/;
-use FindBin qw/$Bin/;
+class Test::Suite 0.02 {
+    use Moose::Util qw/does_role/;
+    use Test::Builder;
+    use File::Spec::Functions qw/catdir splitdir/;
+    use File::Find;
+    use FindBin qw/$Bin/;
+    use Module::Load;
 
-our $VERSION = "0.01";
+    has test_dirs => (
+        is  => 'rw',
+        isa => 'ArrayRef[Str]',
+        default => sub {
+            return [ catdir($Bin) ];
+        },
+    );
 
-has test_dirs => (
-    is  => 'rw',
-    isa => 'Str',
-    default => sub {
-        return [ catdir($Bin, 't', 'Tests') ];
-    },
-);
+    has test_args => (
+        is => 'rw',
+        isa => 'HashRef',
+        lazy => 1,
+        default => sub {{}},
+    );
 
-has test_classes => (
-    is => 'rw',
-    isa => 'ArrayRef',
-    lazy_build => 1,
-);
+    has test_classes => (
+        is      => 'rw',
+        isa     => 'ArrayRef',
+        lazy    => 1,
+        builder => 1,
+    );
 
-has exclude_tests => (
-    is => 'rw',
-    isa => 'ArrayRef[Str]',
-    default => sub {[]};
-);
+    has exclude_tests => (
+        is      => 'rw',
+        isa     => ArrayRef[Str],
+        default => sub {[]},
+    );
 
-sub runtests {
-    my ($self) = @_;
+    has builder => (
+        is      => 'rw',
+        isa     => 'Test::Builder',
+        lazy    => 1,
+        default => sub { return Test::Builder->new},
+    );
 
-    my $builder = $self->builder;
-    for my $test_class ($self->test_classes){
-        $builder->subtest(
-            $test_class,
-            $test->run_tests(test_args => $self->test_args);
-        );
-    }
-}
-
-sub filter_test_classes {
-    my ($self, $directory, $test_classes) = @_;
-
-    return sub {
-        return unless $File::Find::name =~ /\.pm$/;
-    };
-}
-
-sub _build_test_classes {
-    my ($self) = @_;
-
-    my $test_classes = [];
-
-    for my $directory ($self->test_dirs){
-        $directory = catdir(split '/', $directory);
-        find(
-            no_chdir    => 1,
-            wanted      => \filter_test_class($directory, $test_classes));
+    method runtests {
+        return $self->run();
     }
 
-    return $test_classes;
+    method run {
+        my $builder = $self->builder;
+        for my $test_class (@{$self->test_classes}){
+            my $test = $test_class->new(%{$self->test_args}, exclude => $self->exclude_tests);
+            $builder->subtest(
+                $test_class,
+                $test->run_tests,
+            );
+        }
+        return $self;
+    }
+
+    method filter_test_files (Str $test_dir, ArrayRef[Str] $test_classes --> CodeRef){
+        return sub {
+            my $file = $File::Find::name;
+            return unless $file =~ /\.pm$/;
+
+            # Turn file names into package names, return if file doesn't look like a package
+            $file =~ s/^$test_dir//;
+            $file =~ s/\.pm$//;
+            my ($package) = (join '::', grep $_, splitdir($file)) =~ /^([[:word:]]+(?:::[[:word:]]+)*)$/;
+            return unless $package;
+
+            # Load the package and add it to the list of test classes if it does the Test::Suite test role
+            eval { "use $package;" };
+            unshift @$test_classes, $package if does_role($package, 'Test::Suite::Role::Test');
+        };
+    }
+
+    method _build_test_classes {
+        my $test_classes = [];
+        for my $test_dir(@{$self->test_dirs}){
+            # Add OS specific PATH to @INC
+            $test_dir = catdir(split '/', $test_dir);
+            unshift @INC, $test_dir;
+
+            # Provide overloadable filter for test class loading
+            find({
+                no_chdir    => 1,
+                wanted      => $self->filter_test_files($test_dir, $test_classes),
+            }, $test_dir);
+        }
+
+        return $test_classes;
+    }
 }
 
 1;
