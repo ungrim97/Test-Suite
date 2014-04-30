@@ -1,19 +1,11 @@
 package Test::Suite::Test;
-use Moose::Util qw/apply_all_roles/;
 
-sub import {
-    my ($class) = @_;
-    my $caller = caller;
+use Moose ();
+use Moose::Exporter;
 
-    my $export = <<"END";
-package $caller;
-use Moose;
-use Test::Most;
-
-END
-
-    eval $export;
-    apply_all_roles($caller, 'Test::Suite::Role::Test');
-}
+Moose::Exporter->setup_import_methods(
+    base_class_roles => [qw/Test::Suite::Role::Test/],
+    also             => (qw/Moose/),
+);
 
 1;
