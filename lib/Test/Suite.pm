@@ -56,6 +56,7 @@ class Test::Suite 0.02 {
                 $test->run_tests,
             );
         }
+        $builder->done_testing;
         return $self;
     }
 
