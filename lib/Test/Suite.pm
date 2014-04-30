@@ -2,9 +2,8 @@ use 5.008005;
 use Moops;
 
 class Test::Suite 0.02 {
-    use Moose::Util qw/does_role/;
     use Test::Builder;
-    use File::Spec::Functions qw/catdir splitdir/;
+    use File::Spec::Functions qw/catdir splitdir rel2abs/;
     use File::Find;
     use FindBin qw/$Bin/;
     use Module::Load;
@@ -79,9 +78,9 @@ class Test::Suite 0.02 {
 
     method _build_test_classes {
         my $test_classes = [];
-        for my $test_dir(@{$self->test_dirs}){
+        for my $test_dir (@{$self->test_dirs}){
             # Add OS specific PATH to @INC
-            $test_dir = catdir(split '/', $test_dir);
+            $test_dir = rel2abs(catdir(split '/', $test_dir));
             unshift @INC, $test_dir;
 
             # Provide overloadable filter for test class loading
