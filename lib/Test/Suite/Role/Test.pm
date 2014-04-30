@@ -14,9 +14,13 @@ A Moose Role used to inform L<Test::Suite> that this class contains TEST_METHODS
 
 =cut
 
-role Test::Suite::Role::Test 0.2 {
-    use Test::Most;
-    use namespace::autoclean;
+role Test::Suite::Role::Test {
+
+    has suite => (
+        is => 'ro',
+        isa => 'Test::Suite',
+        required => 1,
+    );
 
     method run_tests {
         return sub {
