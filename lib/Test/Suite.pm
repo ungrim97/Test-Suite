@@ -72,7 +72,7 @@ class Test::Suite 0.02 {
             return unless $package;
 
             # Load the package and add it to the list of test classes if it does the Test::Suite test role
-            eval { "use $package;" };
+            load $package;
             unshift @$test_classes, $package if does_role($package, 'Test::Suite::Role::Test');
         };
     }
