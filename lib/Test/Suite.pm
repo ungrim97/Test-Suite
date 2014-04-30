@@ -73,7 +73,9 @@ class Test::Suite 0.02 {
 
             # Load the package and add it to the list of test classes if it does the Test::Suite test role
             load $package;
-            unshift @$test_classes, $package if does_role($package, 'Test::Suite::Role::Test');
+            return unless $package->DOES("Test::Suite::Role::Test");
+
+            unshift @$test_classes, $package;
         };
     }
 
