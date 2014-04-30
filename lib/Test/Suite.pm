@@ -3,7 +3,7 @@ use Moops;
 
 class Test::Suite 0.02 {
     use Test::Builder;
-    use File::Spec::Functions qw/catdir splitdir rel2abs/;
+    use File::Spec::Functions qw/catdir splitdir rel2abs abs2rel/;
     use File::Find;
     use FindBin qw/$Bin/;
     use Module::Load;
@@ -65,8 +65,8 @@ class Test::Suite 0.02 {
             my $file = $File::Find::name;
             return unless $file =~ /\.pm$/;
 
+            $file = abs2rel($file, 't');
             # Turn file names into package names, return if file doesn't look like a package
-            $file =~ s/^$test_dir//;
             $file =~ s/\.pm$//;
             my ($package) = (join '::', grep $_, splitdir($file)) =~ /^([[:word:]]+(?:::[[:word:]]+)*)$/;
             return unless $package;
@@ -81,10 +81,15 @@ class Test::Suite 0.02 {
 
     method _build_test_classes {
         my $test_classes = [];
+
+        # All test dirs should be relative to t/ so add t/ to @INC
+        unshift @INC, 't';
+
+        # Test dirs is a list of the locations to look for .pm file
+        # not a list of the @INC bases
         for my $test_dir (@{$self->test_dirs}){
             # Add OS specific PATH to @INC
             $test_dir = rel2abs(catdir(split '/', $test_dir));
-            unshift @INC, $test_dir;
 
             # Provide overloadable filter for test class loading
             find({
