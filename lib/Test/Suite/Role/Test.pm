@@ -44,7 +44,9 @@ role Test::Suite::Role::Test {
         my $tests = [];
         for my $test_method ($self->meta->get_method_list){
             next if $test_method =~ $filter_test_methods;
-            push $tests, $test_method;
+            next if grep {$_ eq $test_method} $self->suite->exclude_tests;
+
+            push @$tests, $test_method;
         }
 
         return $tests;
