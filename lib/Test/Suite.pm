@@ -51,7 +51,7 @@ class Test::Suite 0.02 {
     method run {
         my $builder = $self->builder;
         for my $test_class (@{$self->test_classes}){
-            my $test = $test_class->new(%{$self->test_args}, exclude => $self->exclude_tests);
+            my $test = $test_class->new(suite => $self, %{$self->test_args});
             $builder->subtest(
                 $test_class,
                 $test->run_tests,
