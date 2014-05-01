@@ -33,7 +33,15 @@ class Test::Suite 0.02 {
     has exclude_tests => (
         is      => 'rw',
         isa     => ArrayRef[Str],
+        lazy    => 1,
         default => sub {[]},
+    );
+
+    has tags => (
+        is      => 'rw',
+        isa     => ArrayRef[Str],
+        lazy    => 1,
+        default => sub {[]}
     );
 
     has builder => (

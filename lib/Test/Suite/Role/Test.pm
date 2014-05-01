@@ -15,6 +15,25 @@ A Moose Role used to inform L<Test::Suite> that this class contains TEST_METHODS
 =cut
 
 role Test::Suite::Role::Test {
+    use Attribute::Handlers;
+
+    my %method_tags;
+    sub UNIVERSAL::Tags :ATTR {
+        my ($self, $sym_ref, $tags) = @_[0, 1, 4];
+
+        my $method = $$sym_ref;
+        $method =~ s/^\*$self\:\://;
+
+        # Store the Tags as keys to prevent an additional loop later.
+        @{$method_tags{$self}->{$method}}{@$tags} = (1..scalar @$tags);
+    }
+
+    has method_tags => (
+        is      => 'rw',
+        isa     => 'HashRef|Undef',
+        lazy    => 1,
+        builder => '_build_method_tags',
+    );
 
     has suite => (
         is => 'ro',
@@ -44,12 +63,18 @@ role Test::Suite::Role::Test {
         my $tests = [];
         for my $test_method ($self->meta->get_method_list){
             next if $test_method =~ $filter_test_methods;
+
             next if grep {$_ eq $test_method} $self->suite->exclude_tests;
+            next if @{$self->suite->tags} && !defined @{$self->method_tags->{$test_method}}{@{$self->suite->tags}};
 
             push @$tests, $test_method;
         }
 
         return $tests;
+    }
+
+    method _build_method_tags {
+        return $method_tags{ref $self};
     }
 };
 
