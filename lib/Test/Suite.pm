@@ -1,7 +1,7 @@
 use 5.008005;
 use Moops;
 
-class Test::Suite 0.02 {
+class Test::Suite 0.02 types Test::Suite::Types {
     use Test::Builder;
     use File::Spec::Functions qw/catdir splitdir rel2abs abs2rel/;
     use File::Find;
@@ -32,9 +32,10 @@ class Test::Suite 0.02 {
 
     has exclude_tests => (
         is      => 'rw',
-        isa     => ArrayRef[Str],
+        isa     => ExcludeRegexp|Undef,
         lazy    => 1,
-        default => sub {[]},
+        coerce  => 1,
+        default => sub {undef},
     );
 
     has tags => (

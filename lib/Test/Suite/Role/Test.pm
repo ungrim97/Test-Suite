@@ -58,13 +58,16 @@ role Test::Suite::Role::Test {
     method _filter_test_methods {
         my $control_methods = qr/test_(?:start|finish|startup|takedown)/;
         my $not_test        = qr/^(?!test_)/;
-        my $filter_test_methods = qr/$not_test|$control_methods/;
+        my $exclude         = $self->suite->exclude_tests;
+        my $filter_test_methods = join '|', ($not_test, $control_methods, $exclude ? $exclude : () );
+        $filter_test_methods = qr/$filter_test_methods/;
 
         my $tests = [];
         for my $test_method ($self->meta->get_method_list){
+            # Filter out test methods that aren't or that are in the exclude list
             next if $test_method =~ $filter_test_methods;
 
-            next if grep {$_ eq $test_method} $self->suite->exclude_tests;
+            # Filter out test methods without the right tag if a tag is defined
             next if @{$self->suite->tags} && !defined @{$self->method_tags->{$test_method}}{@{$self->suite->tags}};
 
             push @$tests, $test_method;
