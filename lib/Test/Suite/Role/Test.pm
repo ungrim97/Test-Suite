@@ -1,4 +1,6 @@
-use Moops;
+package Test::Suite::Role::Test;
+
+use Moose::Role;
 
 =head1 NAME
 
@@ -14,72 +16,70 @@ A Moose Role used to inform L<Test::Suite> that this class contains TEST_METHODS
 
 =cut
 
-role Test::Suite::Role::Test {
-    use Attribute::Handlers;
+use Attribute::Handlers;
 
-    my %method_tags;
-    sub UNIVERSAL::Tags :ATTR {
-        my ($self, $sym_ref, $tags) = @_[0, 1, 4];
+my %method_tags;
+sub UNIVERSAL::Tags :ATTR {
+    my ($self, $sym_ref, $tags) = @_[0, 1, 4];
 
-        my $method = $$sym_ref;
-        $method =~ s/^\*$self\:\://;
+    my $method = $$sym_ref;
+    $method =~ s/^\*$self\:\://;
 
-        # Store the Tags as keys to prevent an additional loop later.
-        @{$method_tags{$self}->{$method}}{@$tags} = (1..scalar @$tags);
-    }
+    # Store the Tags as keys to prevent an additional loop later.
+    @{$method_tags{$self}->{$method}}{@$tags} = (1..scalar @$tags);
+}
 
-    has method_tags => (
-        is      => 'rw',
-        isa     => 'HashRef|Undef',
-        lazy    => 1,
-        builder => '_build_method_tags',
-    );
+has method_tags => (
+    is      => 'rw',
+    isa     => 'HashRef|Undef',
+    lazy    => 1,
+    default => sub {$method_tags{ref(shift)}},
+);
 
-    has suite => (
-        is => 'ro',
-        isa => 'Test::Suite',
-        required => 1,
-    );
+has suite => (
+    is => 'ro',
+    isa => 'Test::Suite',
+    required => 1,
+);
 
-    method run_tests {
-        return sub {
-            $self->test_startup() if $self->can('test_startup');
+sub run_tests {
+    my ($self) = @_;
+    return sub {
+        $self->test_startup() if $self->can('test_startup');
 
-            for my $test (@{$self->_filter_test_methods}){
-                $self->test_start($test) if $self->can('test_start');
-                $self->$test;
-                $self->test_finish($test) if $self->can('test_finish');
-            }
-
-            $self->test_takedown() if $self->can('test_takedown');
-        }
-    }
-
-    method _filter_test_methods {
-        my $control_methods = qr/test_(?:start|finish|startup|takedown)/;
-        my $not_test        = qr/^(?!test_)/;
-        my $exclude         = $self->suite->exclude_tests;
-        my $filter_test_methods = join '|', ($not_test, $control_methods, $exclude ? $exclude : () );
-        $filter_test_methods = qr/$filter_test_methods/;
-
-        my $tests = [];
-        for my $test_method ($self->meta->get_method_list){
-            # Filter out test methods that aren't or that are in the exclude list
-            next if $test_method =~ $filter_test_methods;
-
-            # Filter out test methods without the right tag if a tag is defined
-            next if @{$self->suite->tags} && !defined @{$self->method_tags->{$test_method}}{@{$self->suite->tags}};
-
-            push @$tests, $test_method;
+        for my $test (@{$self->_filter_test_methods}){
+            $self->test_start($test) if $self->can('test_start');
+            $self->$test;
+            $self->test_finish($test) if $self->can('test_finish');
         }
 
-        return $tests;
+        $self->test_takedown() if $self->can('test_takedown');
+    }
+}
+
+sub _filter_test_methods {
+    my ($self)          = @_;
+
+    my $control_methods = qr/test_(?:start|finish|startup|takedown)/;
+    my $not_test        = qr/^(?!test_)/;
+    my $exclude         = $self->suite->exclude_tests;
+
+    my $filter_test_methods = join '|', ($not_test, $control_methods, $exclude ? $exclude : () );
+    $filter_test_methods    = qr/$filter_test_methods/;
+
+    my $tests = [];
+    for my $test_method ($self->meta->get_method_list){
+        # Filter out test methods that aren't or that are in the exclude list
+        next if $test_method =~ $filter_test_methods;
+
+        # Filter out test methods without the right tag if a tag is defined
+        next if @{$self->suite->tags} && !defined @{$self->method_tags->{$test_method}}{@{$self->suite->tags}};
+
+        push @$tests, $test_method;
     }
 
-    method _build_method_tags {
-        return $method_tags{ref $self};
-    }
-};
+    return $tests;
+}
 
 =head1 METHODS
 

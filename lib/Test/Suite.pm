@@ -1,114 +1,116 @@
+package Test::Suite;
+
 use 5.008005;
-use Moops;
+use Moose;
+use Test::Suite::Types qw/:all/;
 
-class Test::Suite 0.02 types Test::Suite::Types {
-    use Test::Builder;
-    use File::Spec::Functions qw/catdir splitdir rel2abs abs2rel/;
-    use File::Find;
-    use FindBin qw/$Bin/;
-    use Module::Load;
+use Test::Builder;
+use File::Spec::Functions qw/catdir splitdir rel2abs abs2rel/;
+use File::Find;
+use FindBin qw/$Bin/;
+use Module::Load;
 
-    has test_dirs => (
-        is  => 'rw',
-        isa => 'ArrayRef[Str]',
-        default => sub {
-            return [ catdir($Bin) ];
-        },
-    );
+has test_dirs => (
+    is  => 'rw',
+    isa => ArrayRef[Str],
+    default => sub {
+        return [ catdir($Bin) ];
+    },
+);
 
-    has test_args => (
-        is => 'rw',
-        isa => 'HashRef',
-        lazy => 1,
-        default => sub {{}},
-    );
+has test_args => (
+    is => 'rw',
+    isa => HashRef,
+    lazy => 1,
+    default => sub {{}},
+);
 
-    has test_classes => (
-        is      => 'rw',
-        isa     => 'ArrayRef',
-        lazy    => 1,
-        builder => 1,
-    );
+has test_classes => (
+    is      => 'rw',
+    isa     => ArrayRef[TestSuiteTestClass],
+    lazy    => 1,
+    builder => '_build_test_classes',
+);
 
-    has exclude_tests => (
-        is      => 'rw',
-        isa     => ExcludeRegexp|Undef,
-        lazy    => 1,
-        coerce  => 1,
-        default => sub {undef},
-    );
+has exclude_tests => (
+    is      => 'rw',
+    isa     => ExcludeRegexp|Undef,
+    lazy    => 1,
+    coerce  => 1,
+    default => sub {undef},
+);
 
-    has tags => (
-        is      => 'rw',
-        isa     => ArrayRef[Str],
-        lazy    => 1,
-        default => sub {[]}
-    );
+has tags => (
+    is      => 'rw',
+    isa     => ArrayRef[Str],
+    lazy    => 1,
+    default => sub {[]}
+);
 
-    has builder => (
-        is      => 'rw',
-        isa     => 'Test::Builder',
-        lazy    => 1,
-        default => sub { return Test::Builder->new},
-    );
+has builder => (
+    is      => 'rw',
+    isa     => 'Test::Builder',
+    lazy    => 1,
+    default => sub { return Test::Builder->new() },
+);
 
-    method runtests {
-        return $self->run();
+sub runtests {
+    return shift->run();
+}
+
+sub run {
+    my ($self) = @_;
+    my $builder = $self->builder;
+
+    for my $test_class (@{$self->test_classes}){
+        my $test = $test_class->new(suite => $self, %{$self->test_args});
+        $builder->subtest(
+            $test_class,
+            $test->run_tests,
+        );
     }
 
-    method run {
-        my $builder = $self->builder;
-        for my $test_class (@{$self->test_classes}){
-            my $test = $test_class->new(suite => $self, %{$self->test_args});
-            $builder->subtest(
-                $test_class,
-                $test->run_tests,
-            );
-        }
-        $builder->done_testing;
-        return $self;
+    $builder->done_testing;
+    return $self;
+}
+
+sub filter_test_files {
+    my ($self, $test_classes) = @_;
+    return sub {
+        my $file = $File::Find::name;
+        return unless $file =~ /\.pm$/;
+
+        $file = abs2rel($file, 't');
+        # Turn file names into package names, return if file doesn't look like a package
+        $file =~ s/\.pm$//;
+        my ($package) = (join '::', grep $_, splitdir($file)) =~ /^([[:word:]]+(?:::[[:word:]]+)*)$/;
+        return unless $package && is_TestSuiteTestClass($package);
+
+        unshift @$test_classes, $package;
+    };
+}
+
+sub _build_test_classes {
+    my ($self) = @_;
+    my $test_classes = [];
+
+    # All test dirs should be relative to t/ so add t/ to @INC
+    unshift @INC, 't';
+
+    # Test dirs is a list of the locations to look for .pm file
+    # not a list of the @INC bases
+    for my $test_dir (@{$self->test_dirs}){
+        # Add OS specific PATH to @INC
+        $test_dir = rel2abs(catdir(split '/', $test_dir));
+
+        # Provide overloadable filter for test class loading
+        find({
+            no_chdir    => 1,
+            wanted      => $self->filter_test_files($test_classes),
+        }, $test_dir);
     }
 
-    method filter_test_files (Str $test_dir, ArrayRef[Str] $test_classes --> CodeRef){
-        return sub {
-            my $file = $File::Find::name;
-            return unless $file =~ /\.pm$/;
-
-            $file = abs2rel($file, 't');
-            # Turn file names into package names, return if file doesn't look like a package
-            $file =~ s/\.pm$//;
-            my ($package) = (join '::', grep $_, splitdir($file)) =~ /^([[:word:]]+(?:::[[:word:]]+)*)$/;
-            return unless $package;
-
-            # Load the package and add it to the list of test classes if it does the Test::Suite test role
-            load $package;
-            return unless $package->DOES("Test::Suite::Role::Test");
-
-            unshift @$test_classes, $package;
-        };
-    }
-
-    method _build_test_classes {
-        my $test_classes = [];
-
-        # All test dirs should be relative to t/ so add t/ to @INC
-        unshift @INC, 't';
-
-        # Test dirs is a list of the locations to look for .pm file
-        # not a list of the @INC bases
-        for my $test_dir (@{$self->test_dirs}){
-            # Add OS specific PATH to @INC
-            $test_dir = rel2abs(catdir(split '/', $test_dir));
-
-            # Provide overloadable filter for test class loading
-            find({
-                no_chdir    => 1,
-                wanted      => $self->filter_test_files($test_dir, $test_classes),
-            }, $test_dir);
-        }
-
-        return $test_classes;
-    }
+    return $test_classes;
 }
 
 1;
